@@ -10,12 +10,14 @@ import (
 type mockStore struct {
 	counters    map[string]int
 	expirations map[string]time.Duration
+	blocks      map[string]time.Time
 }
 
 func NewMockStore() *mockStore {
 	return &mockStore{
 		counters:    make(map[string]int),
 		expirations: make(map[string]time.Duration),
+		blocks:      make(map[string]time.Time),
 	}
 }
 
@@ -36,6 +38,22 @@ func (m *mockStore) Get(key string) (int, error) {
 func (m *mockStore) Reset(key string) error {
 	delete(m.counters, key)
 	delete(m.expirations, key)
+	return nil
+}
+
+// IsBlocked verifica se a chave está bloqueada no mock store
+func (m *mockStore) IsBlocked(key string) (bool, error) {
+	if unlockTime, ok := m.blocks[key]; ok {
+		// Se o tempo atual for antes do tempo de desbloqueio, ainda está bloqueado
+		return time.Now().Before(unlockTime), nil
+	}
+	return false, nil // Não está na lista de bloqueios, então não está bloqueado
+}
+
+// Block bloqueia a chave no mock store por uma duração específica
+func (m *mockStore) Block(key string, duration time.Duration) error {
+	// Calcula o tempo em que o bloqueio deve expirar
+	m.blocks[key] = time.Now().Add(duration)
 	return nil
 }
 

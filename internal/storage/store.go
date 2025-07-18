@@ -15,4 +15,8 @@ type RateLimiterStore interface {
 
 	// Reseta o contador da chave
 	Reset(key string) error
+
+	IsBlocked(key string) (bool, error)
+
+	Block(key string, duration time.Duration) error
 }

@@ -35,7 +35,7 @@ func NewRedisStore(cfg config.Config) (storage.RateLimiterStore, error) {
 
 	for i := 0; i < maxRetries; i++ {
 		// Adicione um timeout para cada tentativa de ping
-		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second) // Ping com timeout de 3 segundos
+		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second) // Ping com timeout de 5 segundos
 		err := rdb.Ping(pingCtx).Err()
 		cancel() // Libere o recurso do contexto imediatamente
 
@@ -93,4 +93,33 @@ func (r *RedisStore) Get(key string) (int, error) {
 
 func (r *RedisStore) Reset(key string) error {
 	return r.client.Del(r.ctx, key).Err()
+}
+
+// IsBlocked verifica se a chave está bloqueada no Redis.
+// Usa uma chave separada no Redis (ex: "blocked:ip:192.168.1.1" ou "blocked:token:abc").
+func (r *RedisStore) IsBlocked(key string) (bool, error) {
+	blockedKey := "blocked:" + key // Cria uma chave de bloqueio prefixada
+
+	// Tenta obter o valor da chave de bloqueio. Se não existir (redis.Nil), não está bloqueado.
+	_, err := r.client.Get(r.ctx, blockedKey).Result()
+	if err == redis.Nil {
+		return false, nil // Chave de bloqueio não encontrada, então não está bloqueado
+	} else if err != nil {
+		// Outro erro ao consultar o Redis (ex: problema de rede)
+		return false, fmt.Errorf("erro ao verificar bloqueio para chave %s: %w", blockedKey, err)
+	}
+	return true, nil // A chave de bloqueio existe, então está bloqueado
+}
+
+// Block bloqueia a chave (IP ou Token) no Redis por uma duração específica.
+// Define um valor simples (ex: "1") para a chave de bloqueio com uma expiração (TTL).
+func (r *RedisStore) Block(key string, duration time.Duration) error {
+	blockedKey := "blocked:" + key // Cria uma chave de bloqueio prefixada
+
+	// Define a chave de bloqueio com um valor "1" e a duração de expiração
+	err := r.client.Set(r.ctx, blockedKey, "1", duration).Err()
+	if err != nil {
+		return fmt.Errorf("erro ao bloquear chave %s: %w", blockedKey, err)
+	}
+	return nil
 }
